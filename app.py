@@ -6,18 +6,22 @@ import plotly.graph_objects as go
 from tensorflow.keras.models import load_model
 import joblib
 import re
+import os
 import nltk
 from nltk.sentiment.vader import SentimentIntensityAnalyzer
 
 # ---------------------------------------------------------
-# Environment Setup & NLTK Downloads
+# Environment Setup & NLTK Downloads (Cloud-Safe)
 # ---------------------------------------------------------
-# Ensure NLTK lexicon is downloaded quietly without interrupting the app flow
+# Create a local directory for NLTK data to avoid cloud permission errors
+nltk_data_dir = os.path.join(os.getcwd(), 'nltk_data')
+os.makedirs(nltk_data_dir, exist_ok=True)
+nltk.data.path.append(nltk_data_dir)
+
 try:
     nltk.data.find('sentiment/vader_lexicon.zip')
 except LookupError:
-    nltk.download('vader_lexicon', quiet=True)
-
+    nltk.download('vader_lexicon', download_dir=nltk_data_dir, quiet=True)
 # ---------------------------------------------------------
 # Page Configuration & UI/UX Setup
 # ---------------------------------------------------------
