@@ -79,8 +79,8 @@ def load_assets():
     """Builds model, loads raw weights, and loads scalers."""
     # 1. Rebuild the empty architecture
     model = build_lstm_model()
-    # 2. Inject the trained weights
-    model.load_weights('lstm_weights.h5')
+    # 2. Inject the trained weights using the exact filename from your directory
+    model.load_weights('lstm_weights.weights.h5')
     
     scaler_ts = joblib.load('scaler_ts.pkl')
     scaler_text = joblib.load('scaler_text.pkl')
@@ -91,7 +91,7 @@ def load_assets():
 try:
     model, scaler_ts, scaler_text, analyzer = load_assets()
 except Exception as e:
-    st.error(f"Error loading assets: {e}. Ensure 'lstm_weights.h5', 'scaler_ts.pkl', and 'scaler_text.pkl' are uploaded.")
+    st.error(f"Error loading assets: {e}. Ensure 'lstm_weights.weights.h5', 'scaler_ts.pkl', and 'scaler_text.pkl' are uploaded.")
     st.stop()
 
 # ---------------------------------------------------------
