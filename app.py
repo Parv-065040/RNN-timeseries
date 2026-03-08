@@ -3,17 +3,19 @@ import pandas as pd
 import numpy as np
 import yfinance as yf
 import plotly.graph_objects as go
-from tensorflow.keras.models import load_model
 import joblib
 import re
 import os
 import nltk
 from nltk.sentiment.vader import SentimentIntensityAnalyzer
 
+# Import Keras layers to rebuild the model natively
+from tensorflow.keras.models import Model
+from tensorflow.keras.layers import Input, Dense, LSTM, Dropout, concatenate
+
 # ---------------------------------------------------------
 # Environment Setup & NLTK Downloads (Cloud-Safe)
 # ---------------------------------------------------------
-# Create a local directory for NLTK data to avoid Streamlit Cloud permission errors
 nltk_data_dir = os.path.join(os.getcwd(), 'nltk_data')
 os.makedirs(nltk_data_dir, exist_ok=True)
 nltk.data.path.append(nltk_data_dir)
@@ -47,21 +49,49 @@ st.markdown("Integrating **Timeseries Historical Data** with **Unstructured News
 st.markdown("---")
 
 # ---------------------------------------------------------
+# Model Architecture Rebuilding (Bypasses Version Conflicts)
+# ---------------------------------------------------------
+def build_lstm_model():
+    """Reconstructs the precise architecture built in Colab."""
+    # Branch 1: Timeseries (60 timesteps, 2 features: Close, Volume)
+    input_ts = Input(shape=(60, 2), name="Timeseries_Input")
+    lstm_ts = LSTM(units=50, return_sequences=False)(input_ts)
+    dropout_ts = Dropout(0.2)(lstm_ts)
+
+    # Branch 2: Text Sentiment (60 timesteps, 1 feature: Sentiment_Score)
+    input_text = Input(shape=(60, 1), name="Text_Input")
+    lstm_text = LSTM(units=30, return_sequences=False)(input_text)
+    dropout_text = Dropout(0.2)(lstm_text)
+
+    # Merge and Output
+    merged = concatenate([dropout_ts, dropout_text])
+    dense1 = Dense(32, activation='relu')(merged)
+    output = Dense(1, activation='linear', name="Price_Prediction")(dense1)
+
+    model = Model(inputs=[input_ts, input_text], outputs=output)
+    return model
+
+# ---------------------------------------------------------
 # Caching Heavy Functions for Performance
 # ---------------------------------------------------------
 @st.cache_resource
 def load_assets():
-    """Loads the model and scalers once. Using .h5 format for absolute cloud stability."""
-    model = load_model('lstm_stock_model.h5')
+    """Builds model, loads raw weights, and loads scalers."""
+    # 1. Rebuild the empty architecture
+    model = build_lstm_model()
+    # 2. Inject the trained weights
+    model.load_weights('lstm_weights.h5')
+    
     scaler_ts = joblib.load('scaler_ts.pkl')
     scaler_text = joblib.load('scaler_text.pkl')
     analyzer = SentimentIntensityAnalyzer()
+    
     return model, scaler_ts, scaler_text, analyzer
 
 try:
     model, scaler_ts, scaler_text, analyzer = load_assets()
 except Exception as e:
-    st.error(f"Error loading model assets: {e}. Ensure 'lstm_stock_model.h5', 'scaler_ts.pkl', and 'scaler_text.pkl' are in the same folder as app.py.")
+    st.error(f"Error loading assets: {e}. Ensure 'lstm_weights.h5', 'scaler_ts.pkl', and 'scaler_text.pkl' are uploaded.")
     st.stop()
 
 # ---------------------------------------------------------
@@ -90,7 +120,7 @@ if st.sidebar.button("Run Analytical Engine"):
         stock_data = stock_data[['Open', 'High', 'Low', 'Close', 'Volume']].reset_index()
         stock_data['Date'] = pd.to_datetime(stock_data['Date']).dt.tz_localize(None)
         
-        # 2. Simulate Recent News for NLP Pipeline
+        # 2. Simulate Recent News
         sample_headlines = [
             f"{ticker} announces strong forward guidance, exceeding analyst expectations.",
             f"Macroeconomic headwinds apply pressure to {ticker} supply chain.",
@@ -115,10 +145,10 @@ if st.sidebar.button("Run Analytical Engine"):
         df_merged = pd.merge(stock_data, news_data[['Date', 'Sentiment_Score']], on='Date', how='inner')
         
         if len(df_merged) < lookback_days:
-            st.error("Not enough historical trading days extracted to process the 60-day window. Try a different ticker.")
+            st.error("Not enough historical trading days extracted. Try a different ticker.")
             st.stop()
 
-        # 3. Prepare Data for LSTM Inference
+        # 3. Prepare Data for LSTM
         recent_data = df_merged.tail(lookback_days).copy()
         
         ts_features = recent_data[['Close', 'Volume']].values
@@ -207,7 +237,6 @@ if st.sidebar.button("Run Analytical Engine"):
         )
         st.plotly_chart(fig, use_container_width=True)
 
-        # Managerial Interpretation Section
         st.markdown("---")
         st.subheader("Managerial Interpretation & Recommended Policy")
         
